@@ -14,7 +14,7 @@ import info.debatty.java.stringsimilarity.NGram
 import org.apache.spark.broadcast.Broadcast;
 
 case class Person(
-  EinstID: Int,
+  //EinstID: String,
   Nafn: String,
   Fdagur: String,
   Kyn: String,
@@ -46,39 +46,40 @@ object BigDataProject2 {
       .load("DataCSV/blak-einstaklingar.csv")
      df.createOrReplaceTempView("People")
     //df.show()
-    val jaro = new JaroWinkler()
-    val testSQL = session.sql("Select * from People")
-    val l = List()
-    val x = testSQL.collect()
-    // a <- 1 to 3; b <- 1 to 3
-    for(i <- 1 to x.length-1) {
-      for (j <- i+1 to x.length-1) {
-        val jar =jaro.distance(x(i)(1).toString(),x(j)(1).toString())
-        if(jar < 0.1) {
-          println(x(i)(1).toString()+ " | " +  x(j)(1).toString()+" | " +jar)
-        }
-      }
-    }
-    //l.foreach(println)
-    //l.foreach(x => println(x._1 + " | " + x._2 + " | " + x._3))
-    /*val search = df.as[Person]
-    search.show()
-    val broadcastVar = session.sparkContext.broadcast(search)
-*/
-
-
-    /*val stuff = search.flatMap((row: Person) => {
-      val x = broadcastVar.value.map( b => {
-        (row.EinstID.toInt, b.EinstID.toInt, j.distance( row.Nafn.toString(), b.Nafn.toString() ))
-      } )
-      x.collect()
-    }).filter(x=>x._3 < 0.1)
-      .distinct()
+   //val jaro = new JaroWinkler()
+   //val testSQL = session.sql("Select * from People")
+   //val l = List()
+   //val x = testSQL.collect()
+   //// a <- 1 to 3; b <- 1 to 3
+   //for(i <- 1 to x.length-1) { 
+   //  for (j <- i+1 to x.length-1) {
+   //    val jar =jaro.distance(x(i)(1).toString(),x(j)(1).toString())
+   //    if(jar < 0.1) {
+   //      println(x(i)(1).toString()+ " | " +  x(j)(1).toString()+" | " +jar)
+   //    }
+   //  }
+   //}
     
-//    val x = search.map( b => {
-//      (search.first().EinstID, b.EinstID, j.distance( search.first().Nafn, b.Nafn ))
-//    } )
+    val people = df.as[Person].collect()
+    val broadcastVar = session.sparkContext.broadcast(people)
 
-    stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))*/
+    val j = new JaroWinkler()
+
+    val stuff = people.flatMap( p => {
+      var list: List[(String, String, Double)] = Nil
+      var personArr = broadcastVar.value
+      var index = personArr.indexOf( p )
+      for (i <- (index + 1) to (broadcastVar.value.length-1)) {
+        val b = personArr(i)
+        list = (p.Nafn, b.Nafn, j.distance( p.Nafn, b.Nafn )) :: list
+      }
+      //list.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
+      list
+    }).filter(x =>  x._3 < 0.1)
+
+
+    stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
   }
 }
+
+

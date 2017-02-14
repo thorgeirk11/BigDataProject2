@@ -1,0 +1,136 @@
+\documentclass[tog]{acmsiggraph}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{skmath}
+\usepackage{float}
+\usepackage{pgfplots}
+\usepackage[
+    backend=biber,
+    style=ieee,
+    sorting=ynt
+    ]{biblatex}
+
+
+\newcommand\fnurl[2]{%
+  \href{#2}{#1}\footnote{\url{#2}}%
+}
+
+\addbibresource{refs.bib} 
+
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\TOGprojectURL{}
+\TOGvideoURL{}
+\TOGdataURL{}
+\TOGcodeURL{}
+
+\title{T-764-DATA – Spring 2017\\
+Project2: Data Cleaning}
+
+\author{Ingibergur Sindri Stefnisson\\ingibergur13@ru.is\\Reykjavík University \and Sigurgrímur Unnar Ólafsson\\sigurgrimur13@ru.is\\Reykjavík University \and Þorgeir Auðunn Karlsson\\thorgeirk11@ru.is\\Reykjavík University}
+\pdfauthor{Ingibergur, Sigurgrímur, Þorgeir}
+
+\keywords{data-duplication, deduplication}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+    In today's data driven world, the same real-world entity can have many representations in databases. Mapping these different representation to a single entity is hard. This is known as data duplication and is a problem in the industry. The goal of this report is to explore ways to deal with data duplication, known as deduplication, and implement a subset of them on a relatively small data set from the Icelandic Volleyball association.
+\end{abstract}
+
+\keywordlist
+
+\section{Introduction}
+Databases play an essential role in today's data driven world, information about almost everything that can possibly be thought about is kept and stored in databases. A common problem in storing so much data is that sometimes records for the same real world entities are stored with multiple representations. This can lead to all kinds of problems e.g. in a hospital system, if the same person is registered multiple times but with different properties, e.g. the name of the person is sometimes written as "Björn Thor Jónsson" and sometimes written as "Björn T. Jónsson".
+
+Often when databases need to be merged they have different representations of the same entities. For example if two hospitals merge their databases the same person could end up having two records. This could result in incorrect treatment of that person.
+
+If there is no thought put into implementing the way the data is stored, an operation that the person had at one hospital could not be fetched by another hospital that has him under a different version of his name.
+
+This is what is known as duplicated data. What we describe in this report is some known techniques of data deduplication, or trying to map different representations of the same entities to one version of that entity. 
+
+
+%We are going to focus on deduplication of our data and not on modification, since we are asked to identify and remove duplicate entries of the same person. However the techniques discussed can be used to do modification of data as well. 
+
+\section{Background}
+Duplicate record detection is the process of identifying different or multiple records that refer to one unique real-world entity or object, \textcite{bharambe2012survey}. Data deduplication is a highly ambiguous process and there is no silver bullet that solves this problem broadly. In this section we discuss the common ways the industry tackles data deduplication or data cleaning.
+
+Techniques commonly used can be split into two categories single field matching and whole record matching.
+
+\subsection{Field Matching}
+These techniques work on individual fields and are designed to work with string based comparisons. Common mistakes in data result from errors in data entry, e.g. misspellings and type errors. In this section we discuss the common algorithms that find similarities between strings.
+
+One way to measure similarity of two words is to check how many single character manipulations (i.e. insertions, deletions or substitutions) are required to change one word into the other. 
+\textbf{Levenshtein distance}, \cite{levenshtein1966binary} , is an algorithm that uses this method where each operation cost the same. \textbf{Smith Waterman Algorithm}, \textcite{smith1981identification}, is another well known algorithm which has different weights on the operation costs.
+
+\textbf{Token based analysis} are used to detect reordering of words, example "Shake \& Bake" and "Bake \& Shake" will have a very high similarity score. Token based approach splits the sentence into tokens and then runs a similarity check   based some delimiter.
+
+\textbf{$Q$-grams}, \textcite{gravano2001approximate}, is an algorithm often used in natural language processing. It split the strings by sliding a window of size $Q$ over the string and taking all the substrings. Similarly checking is thus the process of checking how many substrings are equal between the strings.  
+
+\subsection{Record Matching}
+Databases usually have tables with multiple fields. Finding errors in whole records is even more complicated than single fields. Field matching can be used but the problem is knowing how these field similarities contribute to identifying duplicate records.
+
+One way is to use domain knowledge to create a general heuristic. The hand crafted heuristic specifies the weights from field matching to identify the duplicate records. Example of such heuristics would be 'If a.name similar to b.name and a.address similar to b.address then match(a,b)' where the similarity is defined by some field matching approach.
+
+Machine learning can be used to learn the weights from field matching in order to identify the duplicate records. However the high ambiguity in record matching as a negative effect on the machine learning approaches. Often the training sets consists of clearly separatable records which give a poor representation of real world examples.
+
+Probabilistic methods such as Bayesian inference have been proven to be effective way to recognize similar records, \textcite{newcombe1959automatic}. Active learning is another way to recognize similar records, where the system learns by interaction from an human, \textcite{sarawagi2002interactive}.
+
+\subsection{Techniques We Use}
+
+
+
+
+\section{Analysis of Our Data}
+We are given a portion of a database from the Icelandic Volleyball Association. What we want to do is try to merge as many representations of the same individual into one individual. In the database we have 9 different tables of different importance to us.\\
+
+\textbf{Individuals:} This is the most important table for us. In it, we have a column for names, which can be either a nickname or the persons real name, we have birthday, gender, their team, email address, home addresses and telephone numbers, and their height. 
+
+\textbf{Teams:} In this table we have many volleyball teams from Iceland, the table includes the name of the team, ordinal number of the team, type of team, whether it is a virtual team or not. 
+
+\textbf{Team Players:} A table that describes what team a player played for in a specific tournament. 
+
+\textbf{Teams in tournaments:} A registration table to enter a team into a tournament.
+
+The rest of the tables are for team leaders off and on the field, coaches and referees. There is likely not much use for these tables in our data deduplication. 
+
+\subsection{Observations}
+What we can observe from our data from just having the tables:
+\begin{itemize}
+    \item If a player has the same name, same birthday, same team and/or phone number as someone else in the database, that is most likely the same person.
+    \item If some players look very similar but are playing for two different teams in the same tournament then they are most likely not the same person.
+    \item We can never generalize anything as being a 100\% fact in this, e.g. there is a possibility of two players being twins and having very similar names, playing for the same team and having the same phone number because it's their home phone number.
+\end{itemize}
+
+%This is where the most important information is kept, e.g. if someone has the same name, same birthday and same team or phone-number, the probability of that being the same person is very high.
+%For us this table isn't of much use except for its identifier which is used for many of the tables we describe below.
+%This can be useful for finding players that might seem really similar, but if they were playing for different teams in a tournament then they are probably not the same person.
+
+\section{Experiments}
+%reference fyrir 4000 börn á ári:http://www.landlaeknir.is/servlet/file/store93/item29321/Talnabrunnur_mars_2016.pdf
+%Reference fyrir tvínefni á Íslandi. http://px.hagstofa.is/pxis/pxweb/is/Ibuar/Ibuar__Faeddirdanir__Nofn__Nofnkk/?rxid=a486c7b1-0c71-48b7-b178-bff5717167cd
+
+\subsection{Baseline experiment}
+The first thing we did was use the individuals table and turn it in a sql table using postgresql. We then create a trigger that checks if the full name and birthday with year was already on a individual. If so we add a connection to that individual in the form of a new column called realID. We then count the unique realIDs to use as a baseline for comparison to other techniques.
+
+While there is no guarantee that the people who get the same realID are the same person, we believe the chances of a person having the same birthday, birth year and full name being in the database we were given were very little, since around 4000 people are born every year in Iceland which gives us around 11 people a day and while we haven't found numbers for the most common full names in Iceland, the most common combination of first and middle name only has 345 people while there are over 11000 names in use in Iceland.
+
+\section{Results}
+
+\section{Conclusions}
+
+\section{Ideas / Future work}
+
+
+
+
+
+\printbibliography
+
+
+\end{document}
