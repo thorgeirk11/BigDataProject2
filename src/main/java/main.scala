@@ -11,10 +11,13 @@ import info.debatty.java.stringsimilarity.Levenshtein
 import info.debatty.java.stringsimilarity.JaroWinkler
 import info.debatty.java.stringsimilarity.NGram
 
-import org.apache.spark.broadcast.Broadcast;
+import collection.mutable.{HashMap, MultiMap, Set}
+import org.apache.spark.broadcast.Broadcast
+
+import scala.collection.mutable;
 
 case class Person(
-  //EinstID: String,
+  EinstID: Int,
   Nafn: String,
   Fdagur: String,
   Kyn: String,
@@ -30,6 +33,8 @@ case class Person(
   Haed : String)
 
 object BigDataProject2 {
+  val jaroWink = new JaroWinkler()
+  val lev = new Levenshtein()
 
   def main(args: Array[String]): Unit = {
     val session = SparkSession.builder()
@@ -43,7 +48,7 @@ object BigDataProject2 {
       .option("delimiter", ";")
       .option("inferSchema", "true") // Automatically infer data types
       .option("header", "true") // Use first line of all files as header
-      .load("DataCSV/blak-einstaklingar.csv")
+      .load("DataCSV/einstaklingar-cleaned.csv")
      df.createOrReplaceTempView("People")
     //df.show()
    //val jaro = new JaroWinkler()
@@ -59,26 +64,113 @@ object BigDataProject2 {
    //    }
    //  }
    //}
-    
+    val mm = new mutable.HashMap[Int,Set[Int]] with mutable.MultiMap[Int, Int]
     val people = df.as[Person].collect()
     val broadcastVar = session.sparkContext.broadcast(people)
-
-    val j = new JaroWinkler()
+    var realIds : List[(Int)] = Nil
 
     val stuff = people.flatMap( p => {
-      var list: List[(String, String, Double)] = Nil
+      var list: List[(Int, Int, Double)] = Nil
       var personArr = broadcastVar.value
       var index = personArr.indexOf( p )
       for (i <- (index + 1) to (broadcastVar.value.length-1)) {
         val b = personArr(i)
-        list = (p.Nafn, b.Nafn, j.distance( p.Nafn, b.Nafn )) :: list
+        val nameComp = Comparison(p,b)
+        if(nameComp > 0.9){
+          if(!mm.contains(p.EinstID) && !mm.contains(b.EinstID)) {
+            mm.addBinding(p.EinstID,b.EinstID)
+          }else if(!mm.contains(p.EinstID) && mm.contains(b.EinstID)){
+            mm.addBinding(b.EinstID,p.EinstID)
+          }else if(mm.contains(p.EinstID) && !mm.contains(b.EinstID)){
+            mm.addBinding(p.EinstID,b.EinstID)
+          }
+        }
+        list = (p.EinstID, b.EinstID, nameComp) :: list
       }
       //list.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
       list
-    }).filter(x =>  x._3 < 0.1)
+    }).filter(x =>  x._3 > 0.9)
+    mm.foreach(println)
+    //stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
+    //println(stuff.length)
+  }
 
 
-    stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
+  def Comparison(person1 : Person, person2: Person) : Double = {
+    val nameWeight = 0.6
+    val dayWeight = 0.3
+    val phoneWeight = 0.1
+    val nameComp = 1-jaroWink.distance(person1.Nafn, person2.Nafn)
+    var weightedPercentage = nameComp * nameWeight
+    val fDagurComp = lev.distance(person1.Fdagur, person2.Fdagur)
+
+
+    if(fDagurComp >2){
+      weightedPercentage += 0
+    }
+    else if(fDagurComp==2){
+      weightedPercentage += 0.7*dayWeight
+    }else if(fDagurComp==1){
+      weightedPercentage += 0.9*dayWeight
+    }else{
+      weightedPercentage += dayWeight
+    }
+    var lowestphoneComp = 8.0
+    var currentphoneComp = 0.0
+    if(person1.Simi1 != null){
+      if(person2.Simi1 != null){
+        lowestphoneComp = phoneCompare(person1.Simi1,person2.Simi1,lowestphoneComp)
+      }
+      if(person2.Simi2 != null){
+        lowestphoneComp = phoneCompare(person1.Simi1,person2.Simi2,lowestphoneComp)
+      }
+      if(person2.Simi3 != null){
+        lowestphoneComp = phoneCompare(person1.Simi1,person2.Simi3,lowestphoneComp)
+      }
+    }
+    if(person1.Simi2 != null){
+      if(person2.Simi1 != null){
+        lowestphoneComp = phoneCompare(person1.Simi2,person2.Simi1,lowestphoneComp)
+      }
+      if(person2.Simi2 != null){
+        lowestphoneComp = phoneCompare(person1.Simi2,person2.Simi2,lowestphoneComp)
+      }
+      if(person2.Simi3 != null){
+        lowestphoneComp = phoneCompare(person1.Simi2,person2.Simi3,lowestphoneComp)
+      }
+    }
+    if(person1.Simi3 != null){
+      if(person2.Simi1 != null){
+        lowestphoneComp = phoneCompare(person1.Simi3,person2.Simi1,lowestphoneComp)
+      }
+      if(person2.Simi2 != null){
+        lowestphoneComp = phoneCompare(person1.Simi3,person2.Simi2,lowestphoneComp)
+      }
+      if(person2.Simi3 != null){
+        lowestphoneComp = phoneCompare(person1.Simi3,person2.Simi3,lowestphoneComp)
+      }
+    }
+    if((person1.Simi1 == null && person1.Simi2 == null && person1.Simi3 == null) || (person2.Simi1 == null && person2.Simi2 == null && person2.Simi3 == null)){
+      weightedPercentage += phoneWeight
+    }else {
+      if(lowestphoneComp == 0){
+        weightedPercentage += phoneWeight
+      }else if(lowestphoneComp == 1){
+        weightedPercentage += 0.9*phoneWeight
+      }else if(lowestphoneComp == 2){
+        weightedPercentage += 0.7*phoneWeight
+      }
+
+    }
+
+    return weightedPercentage
+  }
+  def phoneCompare(phone1 : String, phone2 : String, curr : Double) : Double =  {
+    var compare = lev.distance(phone1,phone2)
+    if(compare < curr){
+      return compare
+    }
+    return curr
   }
 }
 
