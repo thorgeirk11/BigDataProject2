@@ -64,10 +64,8 @@ object BigDataProject2 {
    //    }
    //  }
    //}
-    val mm = new mutable.HashMap[Int,Set[Int]] with mutable.MultiMap[Int, Int]
     val people = df.as[Person].collect()
     val broadcastVar = session.sparkContext.broadcast(people)
-    var realIds : List[(Int)] = Nil
 
     val stuff = people.flatMap( p => {
       var list: List[(Int, Int, Double)] = Nil
@@ -76,23 +74,14 @@ object BigDataProject2 {
       for (i <- (index + 1) to (broadcastVar.value.length-1)) {
         val b = personArr(i)
         val nameComp = Comparison(p,b)
-        if(nameComp > 0.9){
-          if(!mm.contains(p.EinstID) && !mm.contains(b.EinstID)) {
-            mm.addBinding(p.EinstID,b.EinstID)
-          }else if(!mm.contains(p.EinstID) && mm.contains(b.EinstID)){
-            mm.addBinding(b.EinstID,p.EinstID)
-          }else if(mm.contains(p.EinstID) && !mm.contains(b.EinstID)){
-            mm.addBinding(p.EinstID,b.EinstID)
-          }
-        }
+
         list = (p.EinstID, b.EinstID, nameComp) :: list
       }
       //list.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
       list
     }).filter(x =>  x._3 > 0.9)
-    mm.foreach(println)
-    //stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
-    //println(stuff.length)
+    stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
+    println(stuff.length)
   }
 
 
