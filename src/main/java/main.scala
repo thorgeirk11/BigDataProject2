@@ -65,8 +65,9 @@ object BigDataProject2 {
    //  }
    //}
     val people = df.as[Person].collect()
-    val broadcastVar = session.sparkContext.broadcast(people)
 
+    val broadcastVar = session.sparkContext.broadcast(people)
+    //realids.foreach(println)
     val stuff = people.flatMap( p => {
       var list: List[(Int, Int, Double)] = Nil
       var personArr = broadcastVar.value
@@ -80,15 +81,33 @@ object BigDataProject2 {
       //list.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
       list
     }).filter(x =>  x._3 > 0.9)
-    stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
-    println(stuff.length)
+    var uf = new WeightedQuickUnionPathCompressionUF(4593);
+    for(i <- stuff){
+      if(!uf.connected(i._1,i._2)){
+        uf.union(i._1,i._2)
+      }
+    }
+    val groups = people.groupBy(x => uf.find(x.EinstID))
+    println("Size: " +groups.size)
+    for(i <- groups){
+      println("ParentID:" + i._1)
+      for(j <- i._2){
+        println("Person: " + j.EinstID + ", " + j.Nafn + ", " + j.Fdagur)
+      }
+      println("-----------------------------")
+    }
+
+    //stuff.foreach(x=> println(people.find(y => y.EinstID == x._1) +" | " + people.find(z => z.EinstID ==uf.find(x._1))))
+    //stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
+
+    //println(stuff.length)
   }
 
 
   def Comparison(person1 : Person, person2: Person) : Double = {
-    val nameWeight = 0.6
-    val dayWeight = 0.3
-    val phoneWeight = 0.1
+    val nameWeight = 60
+    val dayWeight = 30
+    val phoneWeight = 10
     val nameComp = 1-jaroWink.distance(person1.Nafn, person2.Nafn)
     var weightedPercentage = nameComp * nameWeight
     val fDagurComp = lev.distance(person1.Fdagur, person2.Fdagur)
@@ -98,9 +117,9 @@ object BigDataProject2 {
       weightedPercentage += 0
     }
     else if(fDagurComp==2){
-      weightedPercentage += 0.7*dayWeight
+      weightedPercentage += 0.85*dayWeight
     }else if(fDagurComp==1){
-      weightedPercentage += 0.9*dayWeight
+      weightedPercentage += 0.95*dayWeight
     }else{
       weightedPercentage += dayWeight
     }
@@ -140,18 +159,17 @@ object BigDataProject2 {
       }
     }
     if((person1.Simi1 == null && person1.Simi2 == null && person1.Simi3 == null) || (person2.Simi1 == null && person2.Simi2 == null && person2.Simi3 == null)){
-      weightedPercentage += phoneWeight
+      weightedPercentage /= 90
     }else {
-      if(lowestphoneComp == 0){
+      if (lowestphoneComp == 0) {
         weightedPercentage += phoneWeight
-      }else if(lowestphoneComp == 1){
-        weightedPercentage += 0.9*phoneWeight
-      }else if(lowestphoneComp == 2){
-        weightedPercentage += 0.7*phoneWeight
+      } else if (lowestphoneComp == 1) {
+        weightedPercentage += 0.95 * phoneWeight
+      } else if (lowestphoneComp == 2) {
+        weightedPercentage += 0.85 * phoneWeight
       }
-
+      weightedPercentage /= 100
     }
-
     return weightedPercentage
   }
   def phoneCompare(phone1 : String, phone2 : String, curr : Double) : Double =  {
