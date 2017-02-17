@@ -30,7 +30,15 @@ case class Person(
   Simi2 : String,
   Simi3 : String,
   Timastimpill: String,
-  Haed : String)
+  Haed : String){
+  def print(): Unit = {
+    println("Person: "
+      + EinstID + ", " + Nafn + ", " + Fdagur+  ", "
+      + Kyn + ", " + Netfang + ", " + Simi1+ ", "
+      + Simi2 + ", " + Simi3 + ", " + Haed )
+
+  }
+}
 
 object BigDataProject2 {
   val jaroWink = new JaroWinkler()
@@ -48,26 +56,12 @@ object BigDataProject2 {
       .option("delimiter", ";")
       .option("inferSchema", "true") // Automatically infer data types
       .option("header", "true") // Use first line of all files as header
-      .load("DataCSV/einstaklingar-cleaned.csv")
+      .load("DataCSV/einstaklingar-nytt.csv")
      df.createOrReplaceTempView("People")
-    //df.show()
-   //val jaro = new JaroWinkler()
-   //val testSQL = session.sql("Select * from People")
-   //val l = List()
-   //val x = testSQL.collect()
-   //// a <- 1 to 3; b <- 1 to 3
-   //for(i <- 1 to x.length-1) { 
-   //  for (j <- i+1 to x.length-1) {
-   //    val jar =jaro.distance(x(i)(1).toString(),x(j)(1).toString())
-   //    if(jar < 0.1) {
-   //      println(x(i)(1).toString()+ " | " +  x(j)(1).toString()+" | " +jar)
-   //    }
-   //  }
-   //}
+
     val people = df.as[Person].collect()
 
     val broadcastVar = session.sparkContext.broadcast(people)
-    //realids.foreach(println)
     val stuff = people.flatMap( p => {
       var list: List[(Int, Int, Double)] = Nil
       var personArr = broadcastVar.value
@@ -78,106 +72,84 @@ object BigDataProject2 {
 
         list = (p.EinstID, b.EinstID, nameComp) :: list
       }
-      //list.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
       list
     }).filter(x =>  x._3 > 0.9)
+
     var uf = new WeightedQuickUnionPathCompressionUF(4593);
     for(i <- stuff){
       if(!uf.connected(i._1,i._2)){
         uf.union(i._1,i._2)
       }
     }
-    val groups = people.groupBy(x => uf.find(x.EinstID))
+    val groups = people.groupBy(x => uf.find(x.EinstID)).filter(_._2.length >1)
     println("Size: " +groups.size)
     for(i <- groups){
       println("ParentID:" + i._1)
       for(j <- i._2){
-        println("Person: " + j.EinstID + ", " + j.Nafn + ", " + j.Fdagur)
+        j.print()
       }
       println("-----------------------------")
     }
-
-    //stuff.foreach(x=> println(people.find(y => y.EinstID == x._1) +" | " + people.find(z => z.EinstID ==uf.find(x._1))))
-    //stuff.foreach(x=> println( x._1 + " | " + x._2 + " | " + x._3))
-
-    //println(stuff.length)
   }
 
 
   def Comparison(person1 : Person, person2: Person) : Double = {
-    val nameWeight = 60
-    val dayWeight = 30
-    val phoneWeight = 10
-    val nameComp = 1-jaroWink.distance(person1.Nafn, person2.Nafn)
+    val nameWeight = 10.0
+    val dayWeight = 10.0
+    val phoneWeight = 10.0
+    val emailWeight = 10.0
+    val genderWeight = 10.0
+    var Total = nameWeight + dayWeight + phoneWeight + emailWeight + genderWeight
+
+    val nameComp = 1 - jaroWink.distance( person1.Nafn, person2.Nafn )
     var weightedPercentage = nameComp * nameWeight
-    val fDagurComp = lev.distance(person1.Fdagur, person2.Fdagur)
 
+    val fDagurComp = lev.distance( person1.Fdagur, person2.Fdagur )
+    if (fDagurComp > 2) weightedPercentage += 0
+    else if (fDagurComp == 2) weightedPercentage += 0.85 * dayWeight
+    else if (fDagurComp == 1) weightedPercentage += 0.95 * dayWeight
+    else weightedPercentage += dayWeight
 
-    if(fDagurComp >2){
-      weightedPercentage += 0
+    val emailComp = emailCompare( person1.Netfang, person2.Netfang )
+    if (emailComp != Double.PositiveInfinity)
+      weightedPercentage += emailWeight
+    else
+      Total -= emailWeight
+
+    if (person1.Kyn == person2.Kyn) weightedPercentage += genderWeight;
+
+    val p1 = List(person1.Simi1,person1.Simi2,person1.Simi3)
+    val p2 = List(person2.Simi1,person2.Simi2,person2.Simi3)
+    val phoneMatch = p1.flatMap( x => p2.map( phoneCompare( x, _ ) ) ).min
+
+    if(phoneMatch != Double.PositiveInfinity) {
+      if (phoneMatch == 0) weightedPercentage += phoneWeight
+      else if (phoneMatch == 1) weightedPercentage += 0.95 * phoneWeight
+      else if (phoneMatch == 2) weightedPercentage += 0.85 * phoneWeight
     }
-    else if(fDagurComp==2){
-      weightedPercentage += 0.85*dayWeight
-    }else if(fDagurComp==1){
-      weightedPercentage += 0.95*dayWeight
-    }else{
-      weightedPercentage += dayWeight
-    }
-    var lowestphoneComp = 8.0
-    var currentphoneComp = 0.0
-    if(person1.Simi1 != null){
-      if(person2.Simi1 != null){
-        lowestphoneComp = phoneCompare(person1.Simi1,person2.Simi1,lowestphoneComp)
-      }
-      if(person2.Simi2 != null){
-        lowestphoneComp = phoneCompare(person1.Simi1,person2.Simi2,lowestphoneComp)
-      }
-      if(person2.Simi3 != null){
-        lowestphoneComp = phoneCompare(person1.Simi1,person2.Simi3,lowestphoneComp)
-      }
-    }
-    if(person1.Simi2 != null){
-      if(person2.Simi1 != null){
-        lowestphoneComp = phoneCompare(person1.Simi2,person2.Simi1,lowestphoneComp)
-      }
-      if(person2.Simi2 != null){
-        lowestphoneComp = phoneCompare(person1.Simi2,person2.Simi2,lowestphoneComp)
-      }
-      if(person2.Simi3 != null){
-        lowestphoneComp = phoneCompare(person1.Simi2,person2.Simi3,lowestphoneComp)
-      }
-    }
-    if(person1.Simi3 != null){
-      if(person2.Simi1 != null){
-        lowestphoneComp = phoneCompare(person1.Simi3,person2.Simi1,lowestphoneComp)
-      }
-      if(person2.Simi2 != null){
-        lowestphoneComp = phoneCompare(person1.Simi3,person2.Simi2,lowestphoneComp)
-      }
-      if(person2.Simi3 != null){
-        lowestphoneComp = phoneCompare(person1.Simi3,person2.Simi3,lowestphoneComp)
-      }
-    }
-    if((person1.Simi1 == null && person1.Simi2 == null && person1.Simi3 == null) || (person2.Simi1 == null && person2.Simi2 == null && person2.Simi3 == null)){
-      weightedPercentage /= 90
-    }else {
-      if (lowestphoneComp == 0) {
-        weightedPercentage += phoneWeight
-      } else if (lowestphoneComp == 1) {
-        weightedPercentage += 0.95 * phoneWeight
-      } else if (lowestphoneComp == 2) {
-        weightedPercentage += 0.85 * phoneWeight
-      }
-      weightedPercentage /= 100
-    }
-    return weightedPercentage
+    else
+      Total -= phoneWeight
+
+    return weightedPercentage / Total
   }
-  def phoneCompare(phone1 : String, phone2 : String, curr : Double) : Double =  {
-    var compare = lev.distance(phone1,phone2)
-    if(compare < curr){
-      return compare
-    }
-    return curr
+  def phoneCompare(phone1 : String, phone2 : String) : Double =  {
+    if (phone1 == null || phone2 == null) return Double.PositiveInfinity;
+    return lev.distance(phone1,phone2)
+  }
+  def emailCompare(e1 : String, e2: String) : Double =  {
+    val f1 = firstPartOfemail(e1)
+    val f2 = firstPartOfemail(e2)
+    if (f1._2 && f2._2)
+      return jaroWink.distance(f1._1,f2._1)
+    else
+      return Double.PositiveInfinity
+  }
+
+  def firstPartOfemail(email: String): (String, Boolean) = {
+    if (email == null) return  ("",false)
+    val i = email.indexOf("@")
+    if (i < 0 ) return ("",false)
+    return (email.substring(i),true);
   }
 }
 
