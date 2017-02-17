@@ -134,7 +134,14 @@ object BigDataProject2 {
   }
   def phoneCompare(phone1 : String, phone2 : String) : Double =  {
     if (phone1 == null || phone2 == null) return Double.PositiveInfinity;
-    return lev.distance(phone1,phone2)
+
+    val home = Array('4','5')
+    val personal = Array('6','7','8')
+    if ((home.contains(phone1(0)) &&  home.contains(phone2(0))) ||
+        (personal.contains(phone1(0)) && personal.contains(phone2)))
+       return lev.distance(phone1,phone2)
+    else
+      return Double.PositiveInfinity;
   }
   def emailCompare(e1 : String, e2: String) : Double =  {
     val f1 = firstPartOfemail(e1)
