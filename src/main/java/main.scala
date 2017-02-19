@@ -73,7 +73,8 @@ object BigDataProject2 {
         list = (p.EinstID, b.EinstID, nameComp) :: list
       }
       list
-    }).filter(x =>  x._3 > 0.9)
+    }).filter(x =>  x._3 > 0.95)
+
 
     var uf = new WeightedQuickUnionPathCompressionUF(4593);
     for(i <- stuff){
@@ -83,22 +84,25 @@ object BigDataProject2 {
     }
     val groups = people.groupBy(x => uf.find(x.EinstID)).filter(_._2.length >1)
     println("Size: " +groups.size)
+    var fullmatches = 0
     for(i <- groups){
-      println("ParentID:" + i._1)
+      println("ParentID:" + i._1 + ", size: " + i._2.length)
+      fullmatches += i._2.length
       for(j <- i._2){
         j.print()
       }
       println("-----------------------------")
     }
+    println("Fullmatches: " + fullmatches)
   }
 
 
   def Comparison(person1 : Person, person2: Person) : Double = {
-    val nameWeight = 10.0
-    val dayWeight = 10.0
-    val phoneWeight = 10.0
-    val emailWeight = 10.0
-    val genderWeight = 10.0
+    val nameWeight = 50.0
+    val dayWeight = 50.0
+    val phoneWeight = 0.0
+    val emailWeight = 0.0
+    val genderWeight = 0.0
     var Total = nameWeight + dayWeight + phoneWeight + emailWeight + genderWeight
 
     val nameComp = 1 - jaroWink.distance( person1.Nafn, person2.Nafn )
@@ -112,7 +116,7 @@ object BigDataProject2 {
 
     val emailComp = emailCompare( person1.Netfang, person2.Netfang )
     if (emailComp != Double.PositiveInfinity)
-      weightedPercentage += emailWeight
+      weightedPercentage += emailWeight*emailComp
     else
       Total -= emailWeight
 
@@ -147,7 +151,7 @@ object BigDataProject2 {
     val f1 = firstPartOfemail(e1)
     val f2 = firstPartOfemail(e2)
     if (f1._2 && f2._2)
-      return jaroWink.distance(f1._1,f2._1)
+      return 1-jaroWink.distance(f1._1,f2._1)
     else
       return Double.PositiveInfinity
   }
